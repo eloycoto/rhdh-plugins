@@ -30,7 +30,7 @@ import {
   DEFAULT_PAGE_SIZE,
   DEFAULT_PAGE_SORT,
 } from '@red-hat-developer-hub/backstage-plugin-x2a-common';
-import { Knex } from 'knex';
+import type { Knex } from 'knex';
 import { ProjectsGet } from '../schema/openapi';
 
 // TODO: model via openapi schema
