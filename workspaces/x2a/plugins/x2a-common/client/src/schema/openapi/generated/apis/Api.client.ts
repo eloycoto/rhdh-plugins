@@ -22,6 +22,7 @@ import { FetchApi } from '../types/fetch';
 import crossFetch from 'cross-fetch';
 import { pluginId } from '../pluginId';
 import * as parser from 'uri-template';
+import { MigrationPhase } from '../models/MigrationPhase.model';
 import { Module } from '../models/Module.model';
 import { ModulePhase } from '../models/ModulePhase.model';
 import { Project } from '../models/Project.model';
@@ -85,7 +86,7 @@ export type ProjectsProjectIdCollectArtifactsPost = {
   body: ProjectsProjectIdCollectArtifactsPostRequest;
   query: {
     moduleId?: string;
-    phase: 'init' | 'analyze' | 'migrate' | 'publish';
+    phase: MigrationPhase;
   };
 };
 /**
@@ -224,7 +225,7 @@ export class DefaultApiClient {
   }
 
   /**
-   * Callback endpoint for X2Ansible jobs to submit execution artifacts, telemetry, and results. This endpoint is called by the X2Ansible job runner when a migration phase completes.
+   * Callback endpoint for X2Ansible jobs to submit execution artifacts and results. This endpoint is called by the X2Ansible job runner when a migration phase completes.
    * Collects artifacts from a completed X2Ansible job
    * @param projectId - UUID of the project
    * @param phase - Migration phase that completed

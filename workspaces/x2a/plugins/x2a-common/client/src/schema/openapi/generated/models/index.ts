@@ -24,7 +24,6 @@ export * from '../models/JobStatusEnum.model';
 export * from '../models/MigrationPhase.model';
 export * from '../models/Module.model';
 export * from '../models/ModulePhase.model';
-export * from '../models/PhaseArtifact.model';
 export * from '../models/Project.model';
 export * from '../models/ProjectsGet200Response.model';
 export * from '../models/ProjectsPostRequest.model';

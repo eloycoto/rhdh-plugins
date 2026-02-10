@@ -15,19 +15,19 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { mockServices } from '@backstage/backend-test-utils';
-import { InputError, NotFoundError } from '@backstage/errors';
+import request from 'supertest';
+import express from 'express';
 import type { Job } from '@red-hat-developer-hub/backstage-plugin-x2a-common';
-import {
-  CollectArtifactsHandler,
-  CollectArtifactsRequestBody,
-} from './collectArtifacts';
 
-describe('CollectArtifactsHandler', () => {
-  let handler: CollectArtifactsHandler;
-  let mockX2aDatabase: any;
-  let mockKubeService: any;
-  let mockLogger: ReturnType<typeof mockServices.logger.mock>;
+import { registerCollectArtifactsRoutes } from './collectArtifacts';
+import {
+  createMockRouterDeps,
+  MockRouterDeps,
+} from './__testUtils__/routerTestHelpers';
+
+describe('collectArtifacts routes', () => {
+  let app: express.Express;
+  let mockDeps: MockRouterDeps;
 
   const projectId = randomUUID();
   const jobId = randomUUID();
@@ -35,247 +35,103 @@ describe('CollectArtifactsHandler', () => {
   const k8sJobName = 'test-k8s-job-123';
 
   beforeEach(() => {
-    mockLogger = mockServices.logger.mock();
-
-    // Mock X2ADatabaseService
-    mockX2aDatabase = {
-      getJob: jest.fn(),
-      updateJob: jest.fn(),
-    } as any;
-
-    // Mock KubeService
-    mockKubeService = {
-      getJobLogs: jest.fn(),
-    } as any;
-
-    handler = new CollectArtifactsHandler({
-      logger: mockLogger,
-      x2aDatabase: mockX2aDatabase,
-      kubeService: mockKubeService,
-    });
+    mockDeps = createMockRouterDeps();
+    app = express();
+    app.use(express.json());
+    const router = express.Router();
+    registerCollectArtifactsRoutes(router, mockDeps as any);
+    app.use(router);
   });
 
-  describe('validation tests', () => {
-    it('should throw InputError when jobId is missing', async () => {
-      const requestBody = {
-        status: 'Success',
-        artifacts: {} as any,
-      };
+  describe('validation', () => {
+    it('should return error when jobId is missing', async () => {
+      const res = await request(app)
+        .post(`/projects/${projectId}/collectArtifacts?phase=init`)
+        .send({ status: 'Success', artifacts: [] });
 
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'init',
-          requestBody,
-        ),
-      ).rejects.toThrow(InputError);
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'init',
-          requestBody,
-        ),
-      ).rejects.toThrow('jobId');
+      expect(res.status).toBe(500);
+      expect(res.text).toContain('jobId');
     });
 
-    it('should throw InputError when jobId is not a valid UUID', async () => {
-      const requestBody = {
-        status: 'Success',
-        jobId: 'not-a-uuid',
-        artifacts: {} as any,
-      };
+    it('should return error when jobId is not a valid UUID', async () => {
+      const res = await request(app)
+        .post(`/projects/${projectId}/collectArtifacts?phase=init`)
+        .send({ status: 'Success', jobId: 'not-a-uuid', artifacts: [] });
 
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'init',
-          requestBody,
-        ),
-      ).rejects.toThrow(InputError);
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'init',
-          requestBody,
-        ),
-      ).rejects.toThrow('UUID');
+      expect(res.status).toBe(500);
+      expect(res.text).toContain('UUID');
     });
 
-    it('should throw InputError when moduleId is provided for init phase', async () => {
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Success',
-        jobId,
-        artifacts: {} as any,
-      };
+    it('should return error when moduleId is provided for init phase', async () => {
+      const res = await request(app)
+        .post(
+          `/projects/${projectId}/collectArtifacts?phase=init&moduleId=${moduleId}`,
+        )
+        .send({ status: 'Success', jobId, artifacts: [] });
 
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          moduleId,
-          'init',
-          requestBody,
-        ),
-      ).rejects.toThrow(InputError);
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          moduleId,
-          'init',
-          requestBody,
-        ),
-      ).rejects.toThrow('moduleId must not be provided');
+      expect(res.status).toBe(500);
+      expect(res.text).toContain('moduleId must not be provided');
     });
 
-    it('should throw InputError when moduleId is missing for analyze phase', async () => {
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Success',
-        jobId,
-        artifacts: {} as any,
-      };
+    it('should return error when moduleId is missing for analyze phase', async () => {
+      const res = await request(app)
+        .post(`/projects/${projectId}/collectArtifacts?phase=analyze`)
+        .send({ status: 'Success', jobId, artifacts: [] });
 
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'analyze',
-          requestBody,
-        ),
-      ).rejects.toThrow(InputError);
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'analyze',
-          requestBody,
-        ),
-      ).rejects.toThrow('moduleId is required');
+      expect(res.status).toBe(500);
+      expect(res.text).toContain('moduleId is required');
     });
 
-    it('should throw InputError when moduleId is missing for migrate phase', async () => {
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Success',
-        jobId,
-        artifacts: {} as any,
-      };
+    it('should return error when moduleId is missing for migrate phase', async () => {
+      const res = await request(app)
+        .post(`/projects/${projectId}/collectArtifacts?phase=migrate`)
+        .send({ status: 'Success', jobId, artifacts: [] });
 
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'migrate',
-          requestBody,
-        ),
-      ).rejects.toThrow(InputError);
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'migrate',
-          requestBody,
-        ),
-      ).rejects.toThrow('moduleId is required');
+      expect(res.status).toBe(500);
+      expect(res.text).toContain('moduleId is required');
     });
 
-    it('should throw InputError when status is Error but error field is missing', async () => {
-      const requestBody = {
-        status: 'Error',
-        jobId,
-        artifacts: {} as any,
-      };
+    it('should return error when status is Error but errorDetails is missing', async () => {
+      const res = await request(app)
+        .post(`/projects/${projectId}/collectArtifacts?phase=init`)
+        .send({ status: 'Error', jobId, artifacts: [] });
 
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'init',
-          requestBody,
-        ),
-      ).rejects.toThrow(InputError);
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'init',
-          requestBody,
-        ),
-      ).rejects.toThrow('error field is required');
+      expect(res.status).toBe(500);
+      expect(res.text).toContain('errorDetails field is required');
     });
 
-    it('should throw NotFoundError when job does not exist', async () => {
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Success',
-        jobId,
-        artifacts: {} as any,
-      };
+    it('should return error when job does not exist', async () => {
+      mockDeps.x2aDatabase.getJob.mockResolvedValue(undefined);
 
-      mockX2aDatabase.getJob.mockResolvedValue(undefined);
+      const res = await request(app)
+        .post(`/projects/${projectId}/collectArtifacts?phase=init`)
+        .send({ status: 'Success', jobId, artifacts: [] });
 
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'init',
-          requestBody,
-        ),
-      ).rejects.toThrow(NotFoundError);
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'init',
-          requestBody,
-        ),
-      ).rejects.toThrow('not found');
+      expect(res.status).toBe(500);
+      expect(res.text).toContain('not found');
     });
 
-    it('should throw NotFoundError when job belongs to different project', async () => {
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Success',
-        jobId,
-        artifacts: {} as any,
-      };
-
+    it('should return error when job belongs to different project', async () => {
       const job: Job = {
         id: jobId,
-        projectId: randomUUID(), // Different project
+        projectId: randomUUID(),
         moduleId: undefined,
         phase: 'init',
         status: 'running',
         startedAt: new Date(),
         k8sJobName,
       };
+      mockDeps.x2aDatabase.getJob.mockResolvedValue(job);
 
-      mockX2aDatabase.getJob.mockResolvedValue(job);
+      const res = await request(app)
+        .post(`/projects/${projectId}/collectArtifacts?phase=init`)
+        .send({ status: 'Success', jobId, artifacts: [] });
 
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'init',
-          requestBody,
-        ),
-      ).rejects.toThrow(NotFoundError);
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'init',
-          requestBody,
-        ),
-      ).rejects.toThrow('does not belong to project');
+      expect(res.status).toBe(500);
+      expect(res.text).toContain('does not belong to project');
     });
 
-    it('should throw InputError when job phase does not match request phase', async () => {
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Success',
-        jobId,
-        artifacts: {} as any,
-      };
-
+    it('should return error when job phase does not match request phase', async () => {
       const job: Job = {
         id: jobId,
         projectId,
@@ -285,90 +141,50 @@ describe('CollectArtifactsHandler', () => {
         startedAt: new Date(),
         k8sJobName,
       };
+      mockDeps.x2aDatabase.getJob.mockResolvedValue(job);
 
-      mockX2aDatabase.getJob.mockResolvedValue(job);
+      const res = await request(app)
+        .post(
+          `/projects/${projectId}/collectArtifacts?phase=analyze&moduleId=${moduleId}`,
+        )
+        .send({ status: 'Success', jobId, artifacts: [] });
 
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          moduleId,
-          'analyze',
-          requestBody,
-        ),
-      ).rejects.toThrow(InputError);
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          moduleId,
-          'analyze',
-          requestBody,
-        ),
-      ).rejects.toThrow('phase mismatch');
+      expect(res.status).toBe(500);
+      expect(res.text).toContain('phase mismatch');
     });
 
-    it('should throw InputError when job moduleId does not match request moduleId', async () => {
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Success',
-        jobId,
-        artifacts: {} as any,
-      };
-
+    it('should return error when job moduleId does not match request moduleId', async () => {
       const job: Job = {
         id: jobId,
         projectId,
-        moduleId: randomUUID(), // Different moduleId
+        moduleId: randomUUID(),
         phase: 'analyze',
         status: 'running',
         startedAt: new Date(),
         k8sJobName,
       };
+      mockDeps.x2aDatabase.getJob.mockResolvedValue(job);
 
-      mockX2aDatabase.getJob.mockResolvedValue(job);
+      const res = await request(app)
+        .post(
+          `/projects/${projectId}/collectArtifacts?phase=analyze&moduleId=${moduleId}`,
+        )
+        .send({ status: 'Success', jobId, artifacts: [] });
 
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          moduleId,
-          'analyze',
-          requestBody,
-        ),
-      ).rejects.toThrow(InputError);
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          moduleId,
-          'analyze',
-          requestBody,
-        ),
-      ).rejects.toThrow('moduleId mismatch');
+      expect(res.status).toBe(500);
+      expect(res.text).toContain('moduleId mismatch');
     });
   });
 
   describe('success scenarios', () => {
-    it('should successfully collect artifacts for init job with Success status', async () => {
-      const telemetry = {
-        summary: 'Init phase completed successfully',
-        phase: 'init',
-        startedAt: '2026-02-06T10:00:00Z',
-        endedAt: '2026-02-06T10:05:00Z',
-        agents: {
-          'init-agent': {
-            name: 'init-agent',
-            startedAt: '2026-02-06T10:00:00Z',
-            endedAt: '2026-02-06T10:05:00Z',
-            durationSeconds: 300,
-            toolCalls: { read: 5, write: 3 } as any,
-          } as any,
-        } as any,
-      };
-
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Success',
-        jobId,
-        artifacts: {
-          telemetry,
-        } as any,
-      };
+    it('should collect artifacts for init job with Success status', async () => {
+      const artifacts = [
+        {
+          id: randomUUID(),
+          type: 'migration_plan',
+          value: 'https://repo.example.com/plan.md',
+        },
+      ];
 
       const job: Job = {
         id: jobId,
@@ -382,46 +198,34 @@ describe('CollectArtifactsHandler', () => {
 
       const logs = 'Init job logs from kubernetes';
 
-      mockX2aDatabase.getJob.mockResolvedValue(job);
-      mockKubeService.getJobLogs.mockResolvedValue(logs);
-      mockX2aDatabase.updateJob.mockResolvedValue(undefined);
+      mockDeps.x2aDatabase.getJob.mockResolvedValue(job);
+      mockDeps.kubeService.getJobLogs.mockResolvedValue(logs);
+      mockDeps.x2aDatabase.updateJob.mockResolvedValue(undefined);
 
-      const result = await handler.handleCollectArtifacts(
-        projectId,
-        undefined,
-        'init',
-        requestBody,
-      );
+      const res = await request(app)
+        .post(`/projects/${projectId}/collectArtifacts?phase=init`)
+        .send({ status: 'Success', jobId, artifacts });
 
-      expect(result).toEqual({ message: 'Artifacts collected successfully' });
-      expect(mockX2aDatabase.getJob).toHaveBeenCalledWith({ id: jobId });
-      expect(mockKubeService.getJobLogs).toHaveBeenCalledWith(
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        message: 'Artifacts collected successfully',
+      });
+      expect(mockDeps.x2aDatabase.getJob).toHaveBeenCalledWith({ id: jobId });
+      expect(mockDeps.kubeService.getJobLogs).toHaveBeenCalledWith(
         k8sJobName,
         false,
       );
-      expect(mockX2aDatabase.updateJob).toHaveBeenCalledWith(
+      expect(mockDeps.x2aDatabase.updateJob).toHaveBeenCalledWith(
         expect.objectContaining({
           id: jobId,
           status: 'success',
           log: logs,
-          artifacts: expect.arrayContaining([
-            expect.objectContaining({
-              type: 'telemetry',
-              value: JSON.stringify(telemetry),
-            }),
-          ]),
+          artifacts,
         }),
       );
     });
 
-    it('should successfully collect artifacts for init job with Error status', async () => {
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Error',
-        error: 'Failed to initialize project',
-        jobId,
-        artifacts: {} as any,
-      };
-
+    it('should collect artifacts for init job with Error status', async () => {
       const job: Job = {
         id: jobId,
         projectId,
@@ -434,19 +238,24 @@ describe('CollectArtifactsHandler', () => {
 
       const logs = 'Error logs from kubernetes';
 
-      mockX2aDatabase.getJob.mockResolvedValue(job);
-      mockKubeService.getJobLogs.mockResolvedValue(logs);
-      mockX2aDatabase.updateJob.mockResolvedValue(undefined);
+      mockDeps.x2aDatabase.getJob.mockResolvedValue(job);
+      mockDeps.kubeService.getJobLogs.mockResolvedValue(logs);
+      mockDeps.x2aDatabase.updateJob.mockResolvedValue(undefined);
 
-      const result = await handler.handleCollectArtifacts(
-        projectId,
-        undefined,
-        'init',
-        requestBody,
-      );
+      const res = await request(app)
+        .post(`/projects/${projectId}/collectArtifacts?phase=init`)
+        .send({
+          status: 'Error',
+          errorDetails: 'Failed to initialize project',
+          jobId,
+          artifacts: [],
+        });
 
-      expect(result).toEqual({ message: 'Artifacts collected successfully' });
-      expect(mockX2aDatabase.updateJob).toHaveBeenCalledWith(
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        message: 'Artifacts collected successfully',
+      });
+      expect(mockDeps.x2aDatabase.updateJob).toHaveBeenCalledWith(
         expect.objectContaining({
           id: jobId,
           status: 'error',
@@ -456,19 +265,14 @@ describe('CollectArtifactsHandler', () => {
       );
     });
 
-    it('should successfully collect artifacts for analyze job with moduleId', async () => {
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Success',
-        jobId,
-        artifacts: {
-          telemetry: {
-            summary: 'Analyze phase completed',
-            phase: 'analyze',
-            startedAt: '2026-02-06T11:00:00Z',
-            endedAt: '2026-02-06T11:10:00Z',
-          } as any,
-        } as any,
-      };
+    it('should collect artifacts for analyze job with moduleId', async () => {
+      const artifacts = [
+        {
+          id: randomUUID(),
+          type: 'module_migration_plan',
+          value: 'https://repo.example.com/module-plan.md',
+        },
+      ];
 
       const job: Job = {
         id: jobId,
@@ -480,92 +284,24 @@ describe('CollectArtifactsHandler', () => {
         k8sJobName,
       };
 
-      mockX2aDatabase.getJob.mockResolvedValue(job);
-      mockKubeService.getJobLogs.mockResolvedValue('Analyze logs');
-      mockX2aDatabase.updateJob.mockResolvedValue(undefined);
+      mockDeps.x2aDatabase.getJob.mockResolvedValue(job);
+      mockDeps.kubeService.getJobLogs.mockResolvedValue('Analyze logs');
+      mockDeps.x2aDatabase.updateJob.mockResolvedValue(undefined);
 
-      const result = await handler.handleCollectArtifacts(
-        projectId,
-        moduleId,
-        'analyze',
-        requestBody,
-      );
+      const res = await request(app)
+        .post(
+          `/projects/${projectId}/collectArtifacts?phase=analyze&moduleId=${moduleId}`,
+        )
+        .send({ status: 'Success', jobId, artifacts });
 
-      expect(result).toEqual({ message: 'Artifacts collected successfully' });
-      expect(mockX2aDatabase.getJob).toHaveBeenCalledWith({ id: jobId });
-    });
-
-    it('should serialize telemetry and external links correctly', async () => {
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Success',
-        jobId,
-        artifacts: {
-          telemetry: {
-            summary: 'Test summary',
-            phase: 'init',
-            startedAt: '2026-02-06T10:00:00Z',
-          } as any,
-          externalLinks: {
-            Dashboard: 'https://dashboard.example.com',
-            'Metrics Portal': 'https://metrics.example.com',
-          } as any,
-        } as any,
-      };
-
-      const job: Job = {
-        id: jobId,
-        projectId,
-        moduleId: undefined,
-        phase: 'init',
-        status: 'running',
-        startedAt: new Date(),
-        k8sJobName,
-      };
-
-      mockX2aDatabase.getJob.mockResolvedValue(job);
-      mockKubeService.getJobLogs.mockResolvedValue('logs');
-      mockX2aDatabase.updateJob.mockResolvedValue(undefined);
-
-      await handler.handleCollectArtifacts(
-        projectId,
-        undefined,
-        'init',
-        requestBody,
-      );
-
-      expect(mockX2aDatabase.updateJob).toHaveBeenCalledWith(
-        expect.objectContaining({
-          artifacts: expect.arrayContaining([
-            expect.objectContaining({
-              type: 'telemetry',
-              value: JSON.stringify(requestBody.artifacts.telemetry),
-            }),
-            expect.objectContaining({
-              type: 'externalLink',
-              value: JSON.stringify({
-                name: 'Dashboard',
-                url: 'https://dashboard.example.com',
-              }),
-            }),
-            expect.objectContaining({
-              type: 'externalLink',
-              value: JSON.stringify({
-                name: 'Metrics Portal',
-                url: 'https://metrics.example.com',
-              }),
-            }),
-          ]),
-        }),
-      );
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        message: 'Artifacts collected successfully',
+      });
+      expect(mockDeps.x2aDatabase.getJob).toHaveBeenCalledWith({ id: jobId });
     });
 
     it('should handle empty artifacts correctly', async () => {
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Success',
-        jobId,
-        artifacts: {} as any,
-      };
-
       const job: Job = {
         id: jobId,
         projectId,
@@ -576,18 +312,16 @@ describe('CollectArtifactsHandler', () => {
         k8sJobName,
       };
 
-      mockX2aDatabase.getJob.mockResolvedValue(job);
-      mockKubeService.getJobLogs.mockResolvedValue('logs');
-      mockX2aDatabase.updateJob.mockResolvedValue(undefined);
+      mockDeps.x2aDatabase.getJob.mockResolvedValue(job);
+      mockDeps.kubeService.getJobLogs.mockResolvedValue('logs');
+      mockDeps.x2aDatabase.updateJob.mockResolvedValue(undefined);
 
-      await handler.handleCollectArtifacts(
-        projectId,
-        undefined,
-        'init',
-        requestBody,
-      );
+      const res = await request(app)
+        .post(`/projects/${projectId}/collectArtifacts?phase=init`)
+        .send({ status: 'Success', jobId, artifacts: [] });
 
-      expect(mockX2aDatabase.updateJob).toHaveBeenCalledWith(
+      expect(res.status).toBe(200);
+      expect(mockDeps.x2aDatabase.updateJob).toHaveBeenCalledWith(
         expect.objectContaining({
           artifacts: [],
         }),
@@ -597,18 +331,6 @@ describe('CollectArtifactsHandler', () => {
 
   describe('graceful failure', () => {
     it('should continue when k8s log retrieval fails', async () => {
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Success',
-        jobId,
-        artifacts: {
-          telemetry: {
-            summary: 'Test',
-            phase: 'init',
-            startedAt: '2026-02-06T10:00:00Z',
-          } as any,
-        } as any,
-      };
-
       const job: Job = {
         id: jobId,
         projectId,
@@ -619,19 +341,21 @@ describe('CollectArtifactsHandler', () => {
         k8sJobName,
       };
 
-      mockX2aDatabase.getJob.mockResolvedValue(job);
-      mockKubeService.getJobLogs.mockRejectedValue(new Error('K8s API error'));
-      mockX2aDatabase.updateJob.mockResolvedValue(undefined);
-
-      const result = await handler.handleCollectArtifacts(
-        projectId,
-        undefined,
-        'init',
-        requestBody,
+      mockDeps.x2aDatabase.getJob.mockResolvedValue(job);
+      mockDeps.kubeService.getJobLogs.mockRejectedValue(
+        new Error('K8s API error'),
       );
+      mockDeps.x2aDatabase.updateJob.mockResolvedValue(undefined);
 
-      expect(result).toEqual({ message: 'Artifacts collected successfully' });
-      expect(mockX2aDatabase.updateJob).toHaveBeenCalledWith(
+      const res = await request(app)
+        .post(`/projects/${projectId}/collectArtifacts?phase=init`)
+        .send({ status: 'Success', jobId, artifacts: [] });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        message: 'Artifacts collected successfully',
+      });
+      expect(mockDeps.x2aDatabase.updateJob).toHaveBeenCalledWith(
         expect.objectContaining({
           id: jobId,
           log: null,
@@ -640,12 +364,6 @@ describe('CollectArtifactsHandler', () => {
     });
 
     it('should skip log fetch when k8sJobName is null', async () => {
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Success',
-        jobId,
-        artifacts: {} as any,
-      };
-
       const job: Job = {
         id: jobId,
         projectId,
@@ -653,22 +371,22 @@ describe('CollectArtifactsHandler', () => {
         phase: 'init',
         status: 'running',
         startedAt: new Date(),
-        k8sJobName: null as any, // Testing null case
+        k8sJobName: null as any,
       };
 
-      mockX2aDatabase.getJob.mockResolvedValue(job);
-      mockX2aDatabase.updateJob.mockResolvedValue(undefined);
+      mockDeps.x2aDatabase.getJob.mockResolvedValue(job);
+      mockDeps.x2aDatabase.updateJob.mockResolvedValue(undefined);
 
-      const result = await handler.handleCollectArtifacts(
-        projectId,
-        undefined,
-        'init',
-        requestBody,
-      );
+      const res = await request(app)
+        .post(`/projects/${projectId}/collectArtifacts?phase=init`)
+        .send({ status: 'Success', jobId, artifacts: [] });
 
-      expect(result).toEqual({ message: 'Artifacts collected successfully' });
-      expect(mockKubeService.getJobLogs).not.toHaveBeenCalled();
-      expect(mockX2aDatabase.updateJob).toHaveBeenCalledWith(
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        message: 'Artifacts collected successfully',
+      });
+      expect(mockDeps.kubeService.getJobLogs).not.toHaveBeenCalled();
+      expect(mockDeps.x2aDatabase.updateJob).toHaveBeenCalledWith(
         expect.objectContaining({
           log: null,
         }),
@@ -676,12 +394,6 @@ describe('CollectArtifactsHandler', () => {
     });
 
     it('should throw if database update fails', async () => {
-      const requestBody: CollectArtifactsRequestBody = {
-        status: 'Success',
-        jobId,
-        artifacts: {} as any,
-      };
-
       const job: Job = {
         id: jobId,
         projectId,
@@ -692,19 +404,17 @@ describe('CollectArtifactsHandler', () => {
         k8sJobName,
       };
 
-      mockX2aDatabase.getJob.mockResolvedValue(job);
-      mockKubeService.getJobLogs.mockResolvedValue('logs');
-      mockX2aDatabase.updateJob.mockRejectedValue(new Error('Database error'));
+      mockDeps.x2aDatabase.getJob.mockResolvedValue(job);
+      mockDeps.kubeService.getJobLogs.mockResolvedValue('logs');
+      mockDeps.x2aDatabase.updateJob.mockRejectedValue(
+        new Error('Database error'),
+      );
 
-      // Should throw database error (not swallow it)
-      await expect(
-        handler.handleCollectArtifacts(
-          projectId,
-          undefined,
-          'init',
-          requestBody,
-        ),
-      ).rejects.toThrow('Database error');
+      const res = await request(app)
+        .post(`/projects/${projectId}/collectArtifacts?phase=init`)
+        .send({ status: 'Success', jobId, artifacts: [] });
+
+      expect(res.status).toBe(500);
     });
   });
 });

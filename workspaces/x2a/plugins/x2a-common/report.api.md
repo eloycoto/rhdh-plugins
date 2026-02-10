@@ -15,20 +15,6 @@ export interface AAPCredentials {
     username?: string;
 }
 
-// @public
-export interface AgentMetrics {
-    durationSeconds: number;
-    endedAt?: Date;
-    metrics?: {
-        [key: string]: any;
-    };
-    name: string;
-    startedAt?: Date;
-    toolCalls?: {
-        [key: string]: number;
-    };
-}
-
 // @public (undocumented)
 export interface Artifact {
     id: string;
@@ -121,15 +107,6 @@ export type ModulePhase = 'analyze' | 'migrate' | 'publish';
 // @public
 export function normalizeRepoUrl(url: string): string;
 
-// @public
-export interface PhaseArtifact {
-    externalLinks?: {
-        [key: string]: string;
-    };
-    // (undocumented)
-    telemetry?: Telemetry;
-}
-
 // @public (undocumented)
 export interface Project {
     abbreviation: string;
@@ -186,7 +163,7 @@ export type ProjectsProjectIdCollectArtifactsPost = {
     body: ProjectsProjectIdCollectArtifactsPostRequest;
     query: {
         moduleId?: string;
-        phase: 'init' | 'analyze' | 'migrate' | 'publish';
+        phase: MigrationPhase;
     };
 };
 
@@ -198,8 +175,8 @@ export interface ProjectsProjectIdCollectArtifactsPost200Response {
 // @public (undocumented)
 export interface ProjectsProjectIdCollectArtifactsPostRequest {
     // (undocumented)
-    artifacts: PhaseArtifact;
-    error?: string;
+    artifacts: Array<Artifact>;
+    errorDetails?: string;
     jobId: string;
     status: ProjectsProjectIdCollectArtifactsPostRequestStatusEnum;
 }
@@ -313,17 +290,6 @@ export interface ProjectsProjectIdRunPostRequest {
 export interface RequestOptions {
     // (undocumented)
     token?: string;
-}
-
-// @public
-export interface Telemetry {
-    agents?: {
-        [key: string]: AgentMetrics;
-    };
-    endedAt?: Date;
-    phase: string;
-    startedAt: Date;
-    summary: string;
 }
 
 // @public
