@@ -554,7 +554,7 @@ export const spec = {
     "/projects/{projectId}/collectArtifacts": {
       "post": {
         "summary": "Collects artifacts from a completed X2Ansible job",
-        "description": "Callback endpoint for X2Ansible jobs to submit execution artifacts, telemetry, and results.\nThis endpoint is called by the X2Ansible job runner when a migration phase completes.\n",
+        "description": "Callback endpoint for X2Ansible jobs to submit execution artifacts and results.\nThis endpoint is called by the X2Ansible job runner when a migration phase completes.\n",
         "parameters": [
           {
             "in": "path",
@@ -578,13 +578,7 @@ export const spec = {
             "in": "query",
             "name": "phase",
             "schema": {
-              "type": "string",
-              "enum": [
-                "init",
-                "analyze",
-                "migrate",
-                "publish"
-              ]
+              "$ref": "#/components/schemas/MigrationPhase"
             },
             "required": true,
             "description": "Migration phase that completed"
@@ -605,16 +599,23 @@ export const spec = {
                     ],
                     "description": "Execution status of the job"
                   },
-                  "error": {
+                  "errorDetails": {
                     "type": "string",
-                    "description": "Error message if status is Error"
+                    "description": "Error details if status is Error"
                   },
                   "jobId": {
                     "type": "string",
                     "description": "UUID of the completed job"
                   },
                   "artifacts": {
-                    "$ref": "#/components/schemas/PhaseArtifact"
+                    "type": "array",
+                    "description": "List of artifacts produced by the job",
+                    "items": {
+                      "$ref": "#/components/schemas/Artifact"
+                    }
+                  },
+                  "telemetry": {
+                    "$ref": "#/components/schemas/Telemetry"
                   }
                 },
                 "required": [
@@ -910,22 +911,6 @@ export const spec = {
           "publish"
         ],
         "description": "Phases to execute on a module"
-      },
-      "PhaseArtifact": {
-        "type": "object",
-        "description": "Artifacts produced by a migration phase execution",
-        "properties": {
-          "telemetry": {
-            "$ref": "#/components/schemas/Telemetry"
-          },
-          "externalLinks": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "description": "Map of detail names to external links (e.g., dashboard URLs, reports)"
-          }
-        }
       },
       "Telemetry": {
         "type": "object",

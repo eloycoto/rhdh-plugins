@@ -363,7 +363,7 @@ paths:
     post:
       summary: Collects artifacts from a completed X2Ansible job
       description: |
-        Callback endpoint for X2Ansible jobs to submit execution artifacts, telemetry, and results.
+        Callback endpoint for X2Ansible jobs to submit execution artifacts and results.
         This endpoint is called by the X2Ansible job runner when a migration phase completes.
       parameters:
         - in: path
@@ -384,12 +384,7 @@ paths:
         - in: query
           name: phase
           schema:
-            type: string
-            enum:
-              - init
-              - analyze
-              - migrate
-              - publish
+            $ref: '#/components/schemas/MigrationPhase'
           required: true
           description: Migration phase that completed
       requestBody:
@@ -405,14 +400,19 @@ paths:
                     - Success
                     - Error
                   description: Execution status of the job
-                error:
+                errorDetails:
                   type: string
-                  description: Error message if status is Error
+                  description: Error details if status is Error
                 jobId:
                   type: string
                   description: UUID of the completed job
                 artifacts:
-                  $ref: '#/components/schemas/PhaseArtifact'
+                  type: array
+                  description: List of artifacts produced by the job
+                  items:
+                    $ref: '#/components/schemas/Artifact'
+                telemetry:
+                  $ref: '#/components/schemas/Telemetry'
               required:
                 - status
                 - jobId
@@ -638,19 +638,6 @@ components:
         - publish
       description: Phases to execute on a module
 
-    PhaseArtifact:
-      type: object
-      description: Artifacts produced by a migration phase execution
-      properties:
-        telemetry:
-          $ref: '#/components/schemas/Telemetry'
-        externalLinks:
-          type: object
-          additionalProperties:
-            type: string
-          description: Map of detail names to external links (e.g., dashboard URLs, reports)
-      # Note: No required fields - all are optional as they may not be available in all execution scenarios
-
     Telemetry:
       type: object
       description: Execution telemetry and metrics for a migration phase
@@ -710,3 +697,4 @@ components:
       required:
         - name
         - durationSeconds
+
