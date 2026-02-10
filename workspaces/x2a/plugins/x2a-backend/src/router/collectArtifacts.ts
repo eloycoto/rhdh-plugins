@@ -73,66 +73,77 @@ export function registerCollectArtifactsRoutes(
 
   router.post(
     '/projects/:projectId/collectArtifacts',
-    async (req: express.Request, res: express.Response) => {
-      const { projectId } = req.params;
-      const moduleId = req.query.moduleId as string | undefined;
-      const phase = req.query.phase as MigrationPhase;
-      // TODO: Implement request signature validation for security
-      // The x2aconvertor should sign the request body with the callbackToken:
-      //   signature = HMAC-SHA256(callbackToken, JSON.stringify(requestBody))
-      // Include signature in X-Callback-Signature header
-      // Validate: crypto.timingSafeEqual(expectedSig, providedSig)
-      // This prevents unauthorized job updates and request tampering
-      logger.info(
-        `Processing collectArtifacts for projectId=${projectId}, moduleId=${moduleId}, phase=${phase}`,
-      );
-
-      const validatedRequest = validateRequest(req.body, { moduleId, phase });
-
-      const job = await x2aDatabase.getJob({ id: validatedRequest.jobId });
-      if (!job) {
-        throw new NotFoundError(
-          `Job with ID ${validatedRequest.jobId} not found`,
+    async (
+      req: express.Request,
+      res: express.Response,
+      next: express.NextFunction,
+    ) => {
+      try {
+        const { projectId } = req.params;
+        const moduleId = req.query.moduleId as string | undefined;
+        const phase = req.query.phase as MigrationPhase;
+        // TODO: Implement request signature validation for security
+        // The x2aconvertor should sign the request body with the callbackToken:
+        //   signature = HMAC-SHA256(callbackToken, JSON.stringify(requestBody))
+        // Include signature in X-Callback-Signature header
+        // Validate: crypto.timingSafeEqual(expectedSig, providedSig)
+        // This prevents unauthorized job updates and request tampering
+        logger.info(
+          `Processing collectArtifacts for projectId=${projectId}, moduleId=${moduleId}, phase=${phase}`,
         );
-      }
 
-      if (job.projectId !== projectId) {
-        throw new NotFoundError(
-          `Job ${validatedRequest.jobId} does not belong to project ${projectId}`,
+        const validatedRequest = validateRequest(req.body, {
+          moduleId,
+          phase,
+        });
+
+        const job = await x2aDatabase.getJob({ id: validatedRequest.jobId });
+        if (!job) {
+          throw new NotFoundError(
+            `Job with ID ${validatedRequest.jobId} not found`,
+          );
+        }
+
+        if (job.projectId !== projectId) {
+          throw new NotFoundError(
+            `Job ${validatedRequest.jobId} does not belong to project ${projectId}`,
+          );
+        }
+
+        if (job.phase !== phase) {
+          throw new InputError(
+            `Job phase mismatch: expected ${phase}, got ${job.phase}`,
+          );
+        }
+
+        if (phase !== 'init' && job.moduleId !== moduleId) {
+          throw new InputError(
+            `Job moduleId mismatch: expected ${moduleId}, got ${job.moduleId}`,
+          );
+        }
+
+        const status: JobStatusEnum =
+          validatedRequest.status === 'Success' ? 'success' : 'error';
+        const logs = await fetchJobLogs(kubeService, logger, job.k8sJobName);
+
+        await x2aDatabase.updateJob({
+          id: validatedRequest.jobId,
+          status,
+          finishedAt: new Date(),
+          errorDetails: validatedRequest.errorDetails || null,
+          log: logs,
+          artifacts: validatedRequest.artifacts,
+          telemetry: validatedRequest.telemetry || null,
+        });
+
+        logger.info(
+          `Successfully processed collectArtifacts for job ${validatedRequest.jobId}`,
         );
+        // TODO here when the init/migrate/analyze/publish phase some status&healt should be calculated, no? I guess that an event can be sent.
+        res.json({ message: 'Artifacts collected successfully' });
+      } catch (err) {
+        next(err);
       }
-
-      if (job.phase !== phase) {
-        throw new InputError(
-          `Job phase mismatch: expected ${phase}, got ${job.phase}`,
-        );
-      }
-
-      if (phase !== 'init' && job.moduleId !== moduleId) {
-        throw new InputError(
-          `Job moduleId mismatch: expected ${moduleId}, got ${job.moduleId}`,
-        );
-      }
-
-      const status: JobStatusEnum =
-        validatedRequest.status === 'Success' ? 'success' : 'error';
-      const logs = await fetchJobLogs(kubeService, logger, job.k8sJobName);
-
-      await x2aDatabase.updateJob({
-        id: validatedRequest.jobId,
-        status,
-        finishedAt: new Date(),
-        errorDetails: validatedRequest.errorDetails || null,
-        log: logs,
-        artifacts: validatedRequest.artifacts,
-        telemetry: validatedRequest.telemetry || null,
-      });
-
-      logger.info(
-        `Successfully processed collectArtifacts for job ${validatedRequest.jobId}`,
-      );
-      // TODO here when the init/migrate/analyze/publish phase some status&healt should be calculated, no? I guess that an event can be sent.
-      res.json({ message: 'Artifacts collected successfully' });
     },
   );
 }

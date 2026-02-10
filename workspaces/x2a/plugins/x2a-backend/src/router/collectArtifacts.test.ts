@@ -17,6 +17,7 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import express from 'express';
+import { mockErrorHandler } from '@backstage/backend-test-utils';
 import type { Job } from '@red-hat-developer-hub/backstage-plugin-x2a-common';
 
 import { registerCollectArtifactsRoutes } from './collectArtifacts';
@@ -41,6 +42,7 @@ describe('collectArtifacts routes', () => {
     const router = express.Router();
     registerCollectArtifactsRoutes(router, mockDeps as any);
     app.use(router);
+    app.use(mockErrorHandler());
   });
 
   describe('validation', () => {
@@ -49,7 +51,7 @@ describe('collectArtifacts routes', () => {
         .post(`/projects/${projectId}/collectArtifacts?phase=init`)
         .send({ status: 'Success', artifacts: [] });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(400);
       expect(res.text).toContain('jobId');
     });
 
@@ -58,7 +60,7 @@ describe('collectArtifacts routes', () => {
         .post(`/projects/${projectId}/collectArtifacts?phase=init`)
         .send({ status: 'Success', jobId: 'not-a-uuid', artifacts: [] });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(400);
       expect(res.text).toContain('UUID');
     });
 
@@ -69,7 +71,7 @@ describe('collectArtifacts routes', () => {
         )
         .send({ status: 'Success', jobId, artifacts: [] });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(400);
       expect(res.text).toContain('moduleId must not be provided');
     });
 
@@ -78,7 +80,7 @@ describe('collectArtifacts routes', () => {
         .post(`/projects/${projectId}/collectArtifacts?phase=analyze`)
         .send({ status: 'Success', jobId, artifacts: [] });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(400);
       expect(res.text).toContain('moduleId is required');
     });
 
@@ -87,7 +89,7 @@ describe('collectArtifacts routes', () => {
         .post(`/projects/${projectId}/collectArtifacts?phase=migrate`)
         .send({ status: 'Success', jobId, artifacts: [] });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(400);
       expect(res.text).toContain('moduleId is required');
     });
 
@@ -96,7 +98,7 @@ describe('collectArtifacts routes', () => {
         .post(`/projects/${projectId}/collectArtifacts?phase=init`)
         .send({ status: 'Error', jobId, artifacts: [] });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(400);
       expect(res.text).toContain('errorDetails field is required');
     });
 
@@ -107,7 +109,7 @@ describe('collectArtifacts routes', () => {
         .post(`/projects/${projectId}/collectArtifacts?phase=init`)
         .send({ status: 'Success', jobId, artifacts: [] });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(404);
       expect(res.text).toContain('not found');
     });
 
@@ -127,7 +129,7 @@ describe('collectArtifacts routes', () => {
         .post(`/projects/${projectId}/collectArtifacts?phase=init`)
         .send({ status: 'Success', jobId, artifacts: [] });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(404);
       expect(res.text).toContain('does not belong to project');
     });
 
@@ -149,7 +151,7 @@ describe('collectArtifacts routes', () => {
         )
         .send({ status: 'Success', jobId, artifacts: [] });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(400);
       expect(res.text).toContain('phase mismatch');
     });
 
@@ -171,7 +173,7 @@ describe('collectArtifacts routes', () => {
         )
         .send({ status: 'Success', jobId, artifacts: [] });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(400);
       expect(res.text).toContain('moduleId mismatch');
     });
   });
