@@ -565,6 +565,8 @@ components:
           description: List of artifacts produced by the job
           items:
             $ref: '#/components/schemas/Artifact'
+        telemetry:
+          $ref: '#/components/schemas/Telemetry'
 
     ArtifactType:
       type: string

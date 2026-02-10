@@ -125,6 +125,7 @@ export function registerCollectArtifactsRoutes(
         errorDetails: validatedRequest.errorDetails || null,
         log: logs,
         artifacts: validatedRequest.artifacts,
+        telemetry: validatedRequest.telemetry || null,
       });
 
       logger.info(

@@ -819,6 +819,9 @@ export const spec = {
             "items": {
               "$ref": "#/components/schemas/Artifact"
             }
+          },
+          "telemetry": {
+            "$ref": "#/components/schemas/Telemetry"
           }
         }
       },
